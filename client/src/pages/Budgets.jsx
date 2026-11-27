@@ -8,6 +8,7 @@ import { ErrorBox, Loader, ProgressBar } from '../components/ui.jsx';
 function BudgetCard({ category, status, onChanged }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(status?.limit ?? '');
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const isOverall = category === 'Overall';
 
@@ -15,22 +16,29 @@ function BudgetCard({ category, status, onChanged }) {
     e.preventDefault();
     setError('');
     if (!(Number(value) >= 1)) return setError('Enter an amount of at least 1');
+    setBusy(true);
     try {
       await api.setBudget(category, Number(value));
       setEditing(false);
       onChanged();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setBusy(false);
     }
   }
 
   async function remove() {
+    setError('');
+    setBusy(true);
     try {
       await api.deleteBudget(category);
       setValue('');
       onChanged();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -42,7 +50,7 @@ function BudgetCard({ category, status, onChanged }) {
           {isOverall ? 'Total monthly budget' : category}
         </h3>
         {status && !editing && (
-          <button className="icon-btn danger" onClick={remove} aria-label={`Remove ${category} budget`}><Trash2 size={16} /></button>
+          <button className="icon-btn danger" disabled={busy} onClick={remove} aria-label={`Remove ${category} budget`}><Trash2 size={16} /></button>
         )}
       </div>
 
@@ -68,11 +76,11 @@ function BudgetCard({ category, status, onChanged }) {
       {editing ? (
         <form className="inline-form" onSubmit={save} noValidate>
           <input type="number" min="1" autoFocus value={value} onChange={(e) => setValue(e.target.value)} aria-label={`${category} monthly limit`} placeholder="Monthly limit" />
-          <button className="btn primary">Save</button>
-          <button type="button" className="btn" onClick={() => { setEditing(false); setError(''); }}>Cancel</button>
+          <button className="btn primary" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+          <button type="button" className="btn" disabled={busy} onClick={() => { setEditing(false); setValue(status?.limit ?? ''); setError(''); }}>Cancel</button>
         </form>
       ) : (
-        <button className="btn" onClick={() => setEditing(true)}>{status ? 'Change limit' : 'Set limit'}</button>
+        <button className="btn" disabled={busy} onClick={() => { setValue(status?.limit ?? ''); setError(''); setEditing(true); }}>{status ? 'Change limit' : 'Set limit'}</button>
       )}
       <ErrorBox message={error} />
     </div>
@@ -84,7 +92,11 @@ export default function Budgets() {
   const { data, loading, error, reload } = useAsync(() => api.budgets(month), [month]);
   const cats = useAsync(() => api.categories(), []);
 
-  if ((loading && !data) || !cats.data) return error ? <ErrorBox message={error} onRetry={reload} /> : <Loader />;
+  const loadError = error || cats.error;
+  if ((loading && !data) || (cats.loading && !cats.data)) return <Loader />;
+  if (loadError && (!data || !cats.data)) {
+    return <ErrorBox message={loadError} onRetry={() => { reload(); cats.reload(); }} />;
+  }
 
   const byCategory = Object.fromEntries((data || []).map((b) => [b.category, b]));
   const trouble = (data || []).filter((b) => b.status !== 'ok');
@@ -119,7 +131,7 @@ export default function Budgets() {
 
       <h2 className="section-title">Category budgets</h2>
       <div className="budget-grid">
-        {cats.data.map((c) => (
+        {(cats.data || []).map((c) => (
           <BudgetCard key={`${c}-${byCategory[c]?.limit}`} category={c} status={byCategory[c]} onChanged={reload} />
         ))}
       </div>

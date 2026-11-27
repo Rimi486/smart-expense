@@ -21,6 +21,7 @@ export default function Transactions({ kind }) {
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState(null); // null | 'new' | a transaction
   const [deleting, setDeleting] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState('');
 
   const search = useDebounced(filters.search);
@@ -34,6 +35,7 @@ export default function Transactions({ kind }) {
   const filtered = Object.keys(BLANK).some((k) => filters[k] !== BLANK[k]);
 
   async function confirmDelete() {
+    setDeleteBusy(true);
     try {
       await api.deleteTransaction(deleting._id);
       setDeleting(null);
@@ -41,6 +43,8 @@ export default function Transactions({ kind }) {
       else reload();
     } catch (e) {
       setDeleteError(e.message);
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -147,8 +151,8 @@ export default function Transactions({ kind }) {
           <p>This will permanently delete <strong>{deleting.title}</strong> ({money(deleting.amount)}).</p>
           <ErrorBox message={deleteError} />
           <div className="actions">
-            <button className="btn" onClick={() => setDeleting(null)}>Cancel</button>
-            <button className="btn danger-solid" onClick={confirmDelete}>Delete</button>
+            <button className="btn" disabled={deleteBusy} onClick={() => setDeleting(null)}>Cancel</button>
+            <button className="btn danger-solid" disabled={deleteBusy} onClick={confirmDelete}>{deleteBusy ? 'Deleting…' : 'Delete'}</button>
           </div>
         </Modal>
       )}

@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const auth = require('../middleware/auth');
-const { checkRegister, fail } = require('../utils/validate');
+const { checkRegister, fail, isPlainObject } = require('../utils/validate');
 
 const publicUser = (u) => ({ id: u._id, name: u.name, email: u.email, currency: u.currency, createdAt: u.createdAt });
 const sign = (u) => jwt.sign({ id: u._id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
@@ -21,9 +21,13 @@ router.post('/register', async (req, res, next) => {
 
 router.post('/login', async (req, res, next) => {
   try {
-    const email = String(req.body.email || '').toLowerCase().trim();
+    const body = isPlainObject(req.body) ? req.body : {};
+    const email = typeof body.email === 'string' ? body.email.toLowerCase().trim() : '';
+    const password = typeof body.password === 'string' ? body.password : '';
+    if (!email || !password) return res.status(401).json({ error: 'Incorrect email or password' });
+
     const user = await User.findOne({ email }).select('+password');
-    const ok = user && (await bcrypt.compare(String(req.body.password || ''), user.password));
+    const ok = user && (await bcrypt.compare(password, user.password));
     if (!ok) return res.status(401).json({ error: 'Incorrect email or password' });
     res.json({ token: sign(user), user: publicUser(user) });
   } catch (e) { next(e); }
