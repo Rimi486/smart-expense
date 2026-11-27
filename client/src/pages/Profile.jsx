@@ -14,9 +14,12 @@ export default function Profile() {
 
   const [form, setForm] = useState({ name: user.name, email: user.email, currency: user.currency });
   const [formMsg, setFormMsg] = useState({ error: '', ok: '' });
+  const [profileBusy, setProfileBusy] = useState(false);
   const [pw, setPw] = useState({ currentPassword: '', newPassword: '', confirm: '' });
   const [pwMsg, setPwMsg] = useState({ error: '', ok: '' });
+  const [pwBusy, setPwBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [delBusy, setDelBusy] = useState(false);
   const [delPw, setDelPw] = useState('');
   const [delError, setDelError] = useState('');
 
@@ -25,12 +28,15 @@ export default function Profile() {
     setFormMsg({ error: '', ok: '' });
     if (form.name.trim().length < 2) return setFormMsg({ error: 'Name must be at least 2 characters', ok: '' });
     if (!EMAIL.test(form.email)) return setFormMsg({ error: 'Enter a valid email address', ok: '' });
+    setProfileBusy(true);
     try {
       const r = await api.updateProfile(form);
       setUser(r.user);
       setFormMsg({ error: '', ok: 'Profile updated.' });
     } catch (err) {
       setFormMsg({ error: err.message, ok: '' });
+    } finally {
+      setProfileBusy(false);
     }
   }
 
@@ -39,22 +45,29 @@ export default function Profile() {
     setPwMsg({ error: '', ok: '' });
     if (pw.newPassword.length < 6) return setPwMsg({ error: 'New password must be at least 6 characters', ok: '' });
     if (pw.newPassword !== pw.confirm) return setPwMsg({ error: 'New passwords do not match', ok: '' });
+    setPwBusy(true);
     try {
       await api.changePassword({ currentPassword: pw.currentPassword, newPassword: pw.newPassword });
       setPw({ currentPassword: '', newPassword: '', confirm: '' });
       setPwMsg({ error: '', ok: 'Password changed.' });
     } catch (err) {
       setPwMsg({ error: err.message, ok: '' });
+    } finally {
+      setPwBusy(false);
     }
   }
 
   async function deleteAccount(e) {
     e.preventDefault();
+    setDelError('');
+    if (!delPw) return setDelError('Enter your password');
+    setDelBusy(true);
     try {
       await api.deleteAccount(delPw);
       logout();
     } catch (err) {
       setDelError(err.message);
+      setDelBusy(false);
     }
   }
 
@@ -91,7 +104,7 @@ export default function Profile() {
           </label>
           <ErrorBox message={formMsg.error} />
           {formMsg.ok && <p className="success">{formMsg.ok}</p>}
-          <button className="btn primary">Save changes</button>
+          <button className="btn primary" disabled={profileBusy}>{profileBusy ? 'Saving…' : 'Save changes'}</button>
         </form>
 
         <form className="card form" onSubmit={savePassword} noValidate>
@@ -101,7 +114,7 @@ export default function Profile() {
           <label>Confirm new password<input type="password" autoComplete="new-password" value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} /></label>
           <ErrorBox message={pwMsg.error} />
           {pwMsg.ok && <p className="success">{pwMsg.ok}</p>}
-          <button className="btn primary">Update password</button>
+          <button className="btn primary" disabled={pwBusy}>{pwBusy ? 'Updating…' : 'Update password'}</button>
         </form>
       </section>
 
@@ -120,8 +133,8 @@ export default function Profile() {
             <label>Password<input type="password" autoFocus value={delPw} onChange={(e) => setDelPw(e.target.value)} /></label>
             <ErrorBox message={delError} />
             <div className="actions">
-              <button type="button" className="btn" onClick={() => setDeleting(false)}>Cancel</button>
-              <button className="btn danger-solid">Delete everything</button>
+              <button type="button" className="btn" disabled={delBusy} onClick={() => setDeleting(false)}>Cancel</button>
+              <button className="btn danger-solid" disabled={delBusy}>{delBusy ? 'Deleting…' : 'Delete everything'}</button>
             </div>
           </form>
         </Modal>

@@ -39,7 +39,7 @@ router.get('/', async (req, res, next) => {
   try {
     const user = req.user._id;
     const period = ['week', 'month', 'year'].includes(req.query.period) ? req.query.period : 'month';
-    const { start, end } = periodRange(period, req.query.date);
+    const { start, end } = periodRange(period, typeof req.query.date === 'string' ? req.query.date : '');
     const yearRange = periodRange('year', start.toISOString().slice(0, 10));
     const inRange = { $gte: start, $lt: end };
 

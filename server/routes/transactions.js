@@ -1,9 +1,10 @@
 const router = require('express').Router();
 const Expense = require('../models/Expense');
 const { guessCategory } = require('../utils/categorize');
-const { checkId, checkTransaction, fail } = require('../utils/validate');
+const { checkDateValue, checkId, checkTransaction, fail, isPlainObject } = require('../utils/validate');
 
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const asString = (v) => (typeof v === 'string' ? v : '');
 
 // Flag an expense as unusual if it is > 2.5x the average of the last 90 days in that category
 async function isUnusual(user, category, amount, excludeId) {
@@ -31,7 +32,13 @@ async function resolveFields(user, { type, title, category, amount }, excludeId)
 // GET /api/transactions?type=&search=&category=&from=&to=&sort=&order=&page=&limit=
 router.get('/', async (req, res, next) => {
   try {
-    const { type, search, category, from, to, sort = 'date', order = 'desc' } = req.query;
+    const type = asString(req.query.type);
+    const search = asString(req.query.search);
+    const category = asString(req.query.category);
+    const from = asString(req.query.from);
+    const to = asString(req.query.to);
+    const sort = asString(req.query.sort) || 'date';
+    const order = asString(req.query.order) || 'desc';
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
 
@@ -40,13 +47,13 @@ router.get('/', async (req, res, next) => {
     else if (['income', 'expense', 'investment'].includes(type)) filter.type = type;
     if (category) filter.category = category;
     if (search) {
-      const rx = new RegExp(escapeRegex(String(search).slice(0, 50)), 'i');
+      const rx = new RegExp(escapeRegex(search.slice(0, 50)), 'i');
       filter.$or = [{ title: rx }, { description: rx }];
     }
     if (from || to) {
       filter.date = {};
-      if (from) filter.date.$gte = new Date(from);
-      if (to) filter.date.$lt = new Date(new Date(to).getTime() + 86400000); // include the whole "to" day
+      if (from) filter.date.$gte = checkDateValue(from, 'Invalid "from" date');
+      if (to) filter.date.$lt = new Date(checkDateValue(to, 'Invalid "to" date').getTime() + 86400000); // include the whole "to" day
     }
 
     const sortField = ['date', 'amount', 'title'].includes(sort) ? sort : 'date';
@@ -63,16 +70,17 @@ router.get('/', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const type = req.body.type || 'expense';
+    if (!isPlainObject(req.body)) fail('Invalid request body');
+    const type = req.body.type === undefined ? 'expense' : req.body.type;
     checkTransaction({ ...req.body, type });
     const extra = await resolveFields(req.user._id, { ...req.body, type });
     const created = await Expense.create({
       user: req.user._id,
       type,
-      title: String(req.body.title).trim(),
+      title: req.body.title.trim(),
       amount: Number(req.body.amount),
       date: req.body.date || Date.now(),
-      description: req.body.description || '',
+      description: req.body.description ? req.body.description.trim() : '',
       ...extra,
     });
     res.status(201).json(created);
@@ -94,10 +102,10 @@ router.put('/:id', async (req, res, next) => {
     const extra = await resolveFields(req.user._id, { ...req.body, type }, tx._id);
     Object.assign(tx, {
       type,
-      title: String(req.body.title).trim(),
+      title: req.body.title.trim(),
       amount: Number(req.body.amount),
       date: req.body.date || tx.date,
-      description: req.body.description || '',
+      description: req.body.description ? req.body.description.trim() : '',
       ...extra,
     });
     await tx.save();

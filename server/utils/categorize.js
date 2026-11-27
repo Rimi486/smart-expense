@@ -12,7 +12,7 @@ const RULES = {
 const CATEGORIES = [...Object.keys(RULES), 'Others'];
 
 function guessCategory(text = '') {
-  const t = text.toLowerCase();
+  const t = String(text || '').toLowerCase();
   for (const [category, words] of Object.entries(RULES)) {
     if (words.some((w) => t.includes(w))) return category;
   }

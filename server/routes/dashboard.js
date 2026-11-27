@@ -6,7 +6,7 @@ const { sumByType, expenseByCategory, budgetStatus } = require('../utils/stats')
 router.get('/', async (req, res, next) => {
   try {
     const user = req.user._id;
-    const { start, end, year, month } = monthRange(req.query.month);
+    const { start, end, year, month } = monthRange(typeof req.query.month === 'string' ? req.query.month : '');
     const prevStart = new Date(Date.UTC(year, month - 2, 1));
 
     const [all, current, prev, categories, prevCategories, budgets, recent, unusual] = await Promise.all([

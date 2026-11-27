@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Expense = require('../models/Expense');
 const UserBudget = require('../models/UserBudget');
-const { fail, checkPassword, EMAIL } = require('../utils/validate');
+const { fail, isPlainObject, checkName, checkEmail, checkPassword } = require('../utils/validate');
 
 const publicUser = (u) => ({ id: u._id, name: u.name, email: u.email, currency: u.currency, createdAt: u.createdAt });
 
@@ -20,9 +20,10 @@ router.get('/', async (req, res, next) => {
 // Update name, email and preferred currency
 router.put('/', async (req, res, next) => {
   try {
+    if (!isPlainObject(req.body)) fail('Invalid request body');
     const { name, email, currency } = req.body;
-    if (!name || name.trim().length < 2) fail('Name must be at least 2 characters');
-    if (!EMAIL.test(email || '')) fail('Enter a valid email address');
+    checkName(name);
+    checkEmail(email);
     if (!['INR', 'USD', 'EUR', 'GBP'].includes(currency)) fail('Invalid currency');
 
     const clean = email.toLowerCase().trim();
@@ -37,9 +38,12 @@ router.put('/', async (req, res, next) => {
 
 router.put('/password', async (req, res, next) => {
   try {
+    if (!isPlainObject(req.body)) fail('Invalid request body');
     const { currentPassword, newPassword } = req.body;
     const user = await User.findById(req.user._id).select('+password');
-    if (!(await bcrypt.compare(String(currentPassword || ''), user.password))) fail('Current password is incorrect');
+    if (!user) return res.status(401).json({ error: 'Account no longer exists' });
+    const current = typeof currentPassword === 'string' ? currentPassword : '';
+    if (!(await bcrypt.compare(current, user.password))) fail('Current password is incorrect');
     checkPassword(newPassword);
     user.password = await bcrypt.hash(newPassword, 10);
     await user.save();
@@ -50,8 +54,11 @@ router.put('/password', async (req, res, next) => {
 // Permanently delete the account and all of its data
 router.delete('/', async (req, res, next) => {
   try {
+    const body = isPlainObject(req.body) ? req.body : {};
     const user = await User.findById(req.user._id).select('+password');
-    if (!(await bcrypt.compare(String(req.body.password || ''), user.password))) fail('Password is incorrect');
+    if (!user) return res.status(401).json({ error: 'Account no longer exists' });
+    const password = typeof body.password === 'string' ? body.password : '';
+    if (!(await bcrypt.compare(password, user.password))) fail('Password is incorrect');
     await Promise.all([
       Expense.deleteMany({ user: user._id }),
       UserBudget.deleteMany({ user: user._id }),
